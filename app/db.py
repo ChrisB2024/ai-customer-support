@@ -33,6 +33,33 @@ def start_event(gmail_message_id: str) -> dict | None:
         ).fetchone()
 
 
+def has_reply(gmail_message_id: str) -> bool:
+    """True when we already sent a reply after this incoming message (same ticket)."""
+    with connect() as conn:
+        row = conn.execute(
+            """
+            select exists (
+              select 1
+              from messages incoming
+              join messages reply on reply.ticket_id = incoming.ticket_id
+              where incoming.gmail_message_id = %s
+                and reply.direction = 'out'
+                and reply.created_at > incoming.created_at
+            ) as replied
+            """,
+            (gmail_message_id,),
+        ).fetchone()
+        return row["replied"]
+
+
+def get_event_status(gmail_message_id: str) -> str | None:
+    with connect() as conn:
+        row = conn.execute(
+            "select status from events where gmail_message_id = %s", (gmail_message_id,)
+        ).fetchone()
+        return row["status"] if row else None
+
+
 def finish_event(event_id: int, status: str, result: dict) -> None:
     with connect() as conn:
         conn.execute(
