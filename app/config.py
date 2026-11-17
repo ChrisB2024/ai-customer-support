@@ -1,8 +1,11 @@
+from pathlib import Path
+
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
 # Load .env into the environment, so Pydantic AI also finds ANTHROPIC_API_KEY.
-load_dotenv()
+# Absolute path, so scripts work no matter which directory they are run from.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
 class Settings(BaseSettings):
