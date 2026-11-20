@@ -17,3 +17,8 @@ dependencies = [
     "python-dotenv>=1.2.4",
     "sqlalchemy>=2.1.9",
 ]
+
+[dependency-groups]
+dev = [
+    "nest-asyncio>=1.6.0",
+]
