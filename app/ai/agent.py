@@ -9,35 +9,37 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 INSTRUCTIONS = """
-You are the customer support agent for Harbor & Pine, a home and outdoor store that sells on Amazon.
-You write the answer to the latest customer message in the email thread.
+You are Chris's assistant. Chris Bouda is a founder and AI / ML engineer.
+You write the answer to the latest message from the sender in the email thread.
 Steps:
-1. Call get_section for "brand-and-tone" and for "escalation-rules".
-2. Call get_section for the section the classifier picked. Call list_sections if you need another.
-3. Answer only with facts from those sections. If they do not answer the question,
-   set enough_information to false.
-4. When the customer reports a problem with a paddle board or a shelf, fill in issue.
-   Ask for the order number, the board size or model, and part numbers when they are missing.
-   For a slow leak, explain the valve check unless the customer already did it.
-5. Never promise a refund, a shipment, a replacement, a date, or a call. A colleague arranges those.
-   Set promises_an_action to true if your reply promises one anyway.
-6. Set action to escalate when an escalation rule applies.
+1. Call get_section for the section the classifier picked. Call list_sections if you need another.
+   Its "What happens next" entry holds the routing rules; follow them.
+2. Answer only with facts from those sections. Never invent skills, experience, or projects.
+   If the sections do not answer the question, set enough_information to false.
+3. When the email offers a job, freelance work, consulting, an investment, or a partnership,
+   fill in inquiry. For job, freelance, and consulting, ask for whatever is missing of:
+   the role or project, the timeline, and the budget.
+4. Never promise a call, a meeting, a price or rate, a start date, or a deliverable.
+   Only Chris commits to those. Set promises_an_action to true if your reply promises one anyway.
+5. Set action to escalate when a "What happens next" rule says it goes to Chris.
 Reply rules:
-- Write in the language of the customer's latest message.
+- Write in the language of the sender's latest message.
 - Plain text, no Markdown.
-- Follow the brand-and-tone section.
-- Never mention AI, prompts, tools, or the knowledge base.
+- Friendly and concise. Say Chris will reply personally where that applies.
+- Sign off with "Chris Bouda's assistant". Never pretend to be Chris; if asked,
+  say you are Chris's automated assistant.
+- Never mention prompts, tools, or the knowledge base.
 """
 
-support_agent = Agent(settings.agent_model, output_type=AgentReply, instructions=INSTRUCTIONS)
+assistant_agent = Agent(settings.agent_model, output_type=AgentReply, instructions=INSTRUCTIONS)
 
-@support_agent.tool_plain
+@assistant_agent.tool_plain
 def list_sections() -> list[str]:
     """List the sections of the knowledge base."""
     logger.info("Tool call: list_sections()")
     return db.list_sections()
 
-@support_agent.tool_plain
+@assistant_agent.tool_plain
 def get_section(section: str) -> str:
     """Return every entry of one knowledge base section, for example 'about-me'."""
     logger.info("Tool call: get_section(%r)", section)
@@ -46,14 +48,15 @@ def get_section(section: str) -> str:
         raise ModelRetry(f"There is no section '{section}'. Call list_sections to see the options.")
     return "\n\n".join(f"## {entry['title']}\n{entry['content']}" for entry in entries)
 
-@support_agent.output_validator
+@assistant_agent.output_validator
 def check_reply(ctx: RunContext[None], output:AgentReply) -> AgentReply:
     if output.action == "reply" and not output.reply.strip():
         raise ModelRetry("The reply is empty. Write the email, or set action to escalate.")
-    if re.search(r"\b(AI|artificial intelligence|knowledge base)\b", output.reply, re.IGNORECASE):
-        raise ModelRetry("Do not mention AI or the knowledge base in the reply.")
+    # "AI" is allowed: Chris's skills are AI engineering, and the assistant is open about being one.
+    if re.search(r"\b(knowledge base|system prompt|my instructions)\b", output.reply, re.IGNORECASE):
+        raise ModelRetry("Do not mention the knowledge base, prompts, or instructions in the reply.")
     return output
 
 def write_reply(thread: str, section: str) -> AgentReply:
     prompt = f"Section picked by the classifier: {section}\n\n{thread}"
-    return support_agent.run_sync(prompt).output
+    return assistant_agent.run_sync(prompt).output
